@@ -1,0 +1,23 @@
+{
+    "manifest_version": 2,
+  
+    "name": "ImgurPoliticalFilter",
+    "description": "This extension tries to filter out political posts from imgur.",
+    "version": "1.0",
+    
+    "content_scripts" : [
+        {
+            "matches": ["https://imgur.com/gallery/*"],
+            "css": ["myStyles.css"],
+            "js": ["third_party/axios.min.js", "contentScript.js"]
+        }
+    ],
+
+    "browser_action": {
+     "default_icon": "icon.png",
+     "default_popup": "popup.html"
+    },
+    "permissions": [
+     "activeTab"
+     ]
+}
