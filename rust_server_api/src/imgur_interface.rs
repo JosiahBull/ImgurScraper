@@ -16,11 +16,11 @@ use serde::{Deserialize};
 use reqwest::header::USER_AGENT;
 use anyhow::{Result, anyhow, bail};
 use crate::mongo_db_interface::Database;
-use std::fs;
+use async_std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAIN_URL: &str = "https://www.imgur.com/gallery/";
-const DEFAULT_MAX_CONNECTION: usize = 15;
+const DEFAULT_MAX_CONNECTION: usize = 10;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Image {
@@ -135,17 +135,20 @@ impl Downloader {
         match scanner.set_image(&path) {
             Ok(_) => {},
             Err(e) => {        
-                fs::remove_file(&path);
                 return Ok("".to_owned())
             }
         }
         scanner.set_source_resolution(70);
         let text = scanner.get_utf8_text().unwrap_or("".to_owned());
-        fs::remove_file(&path);
         Ok(text)
     }
 
     async fn dl(&self, uri: Uri) -> anyhow::Result<String> {
+        let extension = &uri.split('.')[0];
+        println!("{}", extension);
+        if (extension == "mp4") {
+            return Ok("".to_owned());
+        }
         let client = self.get_downloader(uri);
         Ok(client
             .and_then(|(res, url)| self.download(res, url) )
@@ -167,13 +170,9 @@ impl Downloader {
 
             for _ in 0..min(self.max_conn, urls_to_download.len()) {
                 let download = self.dl(urls_to_download.remove(0));
-                //Todo:
-                //Scan the image using leptess to check for the text.
-                //Upload to database
                 clients_vec.push(download);
             }
             for res in futures::future::join_all(clients_vec).await {
-                //A thing to do with each future.
                 text_from_images.push(res.unwrap());
             }
         }
