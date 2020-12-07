@@ -26,7 +26,8 @@ pub struct Post {
     pub post_url: String,
     pub datetime: String,
     pub unrecoverable: Option<bool>,
-    pub description: Option<String>
+    pub description: Option<String>,
+    pub title: Option<String>,
 }
 
 impl Database {

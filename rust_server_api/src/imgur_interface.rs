@@ -21,6 +21,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAIN_URL: &str = "https://www.imgur.com/gallery/";
 const DEFAULT_MAX_CONNECTION: usize = 10;
+const UNRECOVERABLE_THRESHOLD: f32 = 0.5;
+
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Image {
@@ -160,62 +162,82 @@ impl Downloader {
     pub async fn download_post_images(&self, mut input: Post) -> anyhow::Result<crate::mongo_db_interface::Post> {
         let mut urls_to_download: Vec<Uri> = vec![];
         let mut text_from_images: Vec<String> = vec![];
-        for image in &input.images {
-            urls_to_download.push(image.link.parse::<Uri>()?);
-        }
-        let image_url_reference = urls_to_download.clone();
-        
-        while !urls_to_download.is_empty() {
-            let mut clients_vec = Vec::with_capacity(self.max_conn);
-
-            for _ in 0..min(self.max_conn, urls_to_download.len()) {
-                let download = self.dl(urls_to_download.remove(0));
-                clients_vec.push(download);
-            }
-            for res in futures::future::join_all(clients_vec).await {
-                text_from_images.push(res.unwrap());
-            }
-        }
-
-        //Run checks
         let filter = crate::filter::Filter::new("./filter_word_list.txt")?;
-        let mut output = crate::mongo_db_interface::Post {
-            id: input.id,
-            images: vec![],
-            post_url: input.link,
-            datetime: get_time().to_string(),
-            unrecoverable: Some(false),
-            description: Some(input.description.clone().unwrap_or("".to_owned())),
-        };
-        
-        for (i, image) in input.images.iter_mut().enumerate() {
-            //Check each image, then push it to the output arr.
+        let mut output: crate::mongo_db_interface::Post;
 
-            let mut unrecoverable = false;
-            if filter.is_unsafe(&image.description.clone().unwrap_or("".to_owned())) {
-                unrecoverable = true;
+        if filter.is_unsafe(&input.title.clone().unwrap_or("".to_owned())) || filter.is_unsafe(&input.description.clone().unwrap_or("".to_owned())) {
+            output = crate::mongo_db_interface::Post {
+                id: input.id,
+                images: vec![],
+                post_url: input.link,
+                datetime: get_time().to_string(),
+                unrecoverable: Some(true),
+                description: Some(input.description.unwrap_or("".to_owned())),
+                title: Some(input.title.unwrap_or("".to_owned())),
             }
-            if filter.is_unsafe(&text_from_images[i]) {
-                unrecoverable = true;
+        } else {
+            for image in &input.images {
+                urls_to_download.push(image.link.parse::<Uri>()?);
             }
-
-            let new_image = crate::mongo_db_interface::Image {
-                id: image.id.clone(),
-                description: image.description.clone().unwrap_or("".to_owned()),
-                url: image.link.clone(),
-                unrecoverable: Some(unrecoverable),
-                image_OCR_text: Some(text_from_images[i].clone())
+            let image_url_reference = urls_to_download.clone();
+            
+            while !urls_to_download.is_empty() {
+                let mut clients_vec = Vec::with_capacity(self.max_conn);
+    
+                for _ in 0..min(self.max_conn, urls_to_download.len()) {
+                    let download = self.dl(urls_to_download.remove(0));
+                    clients_vec.push(download);
+                }
+                for res in futures::future::join_all(clients_vec).await {
+                    text_from_images.push(res.unwrap());
+                }
+            }
+    
+            //Run checks
+            
+            output = crate::mongo_db_interface::Post {
+                id: input.id,
+                images: vec![],
+                post_url: input.link,
+                datetime: get_time().to_string(),
+                unrecoverable: Some(false),
+                description: Some(input.description.clone().unwrap_or("".to_owned())),
+                title: Some(input.title.clone().unwrap_or("".to_owned())),
             };
-            if (unrecoverable) {
-
+            let mut num_unrecoverable = 0;
+            let mut num_images = 0;
+            for (i, image) in input.images.iter_mut().enumerate() {
+                //Check each image, then push it to the output arr.
+    
+                let mut unrecoverable = false;
+                if filter.is_unsafe(&image.description.clone().unwrap_or("".to_owned())) {
+                    unrecoverable = true;
+                }
+                if filter.is_unsafe(&text_from_images[i]) {
+                    unrecoverable = true;
+                }
+    
+                let new_image = crate::mongo_db_interface::Image {
+                    id: image.id.clone(),
+                    description: image.description.clone().unwrap_or("".to_owned()),
+                    url: image.link.clone(),
+                    unrecoverable: Some(unrecoverable),
+                    image_OCR_text: Some(text_from_images[i].clone())
+                };
+                if unrecoverable {
+                    num_unrecoverable += 1;
+                }
+                let extension: Vec<&str> = image.link.split(".").collect();
+                if extension[extension.len() - 1] != "mp4" {
+                    num_images += 1;
+                }
+                output.images.push(new_image);
+            };
+            //Check # of (non-video) images marked as unrecoverable doesn't cross threshold.
+            if (num_unrecoverable as f32 / num_images as f32) as f32 >= UNRECOVERABLE_THRESHOLD {
+                output.unrecoverable = Some(true);
             }
-            output.images.push(new_image);
-        };
-        //Check post description
-        if filter.is_unsafe(&input.description.unwrap_or("".to_owned())) {
-            output.unrecoverable = Some(true);
         }
-        //Check # of (non-video) images marked as 
 
         //Upload to DB
         self.db.upload_post(output.clone()).await;
@@ -233,7 +255,7 @@ impl Downloader {
         let mut response = client
             .get(&url)
             .header(USER_AGENT, "PostmanRuntime/7.26.8")
-            .header("Authorization", "Client-ID 80e581547b60687")
+            .header("Authorization", "Client-ID ")
             .header("Accept", "*/*")
             .header("Connection", "keep-alive")
             .send()
@@ -244,7 +266,7 @@ impl Downloader {
             response = client
                 .get(&url)
                 .header(USER_AGENT, "PostmanRuntime/7.26.8")
-                .header("Authorization", "Client-ID 80e581547b60687")
+                .header("Authorization", "Client-ID ")
                 .header("Accept", "*/*")
                 .header("Connection", "keep-alive")
                 .send()
