@@ -144,9 +144,9 @@ impl Downloader {
     }
 
     async fn dl(&self, uri: Uri) -> anyhow::Result<String> {
-        let extension = &uri.split('.')[0];
-        println!("{}", extension);
-        if (extension == "mp4") {
+        let input_string = uri.to_string();
+        let extension: Vec<&str> = input_string.split(".").collect();
+        if extension[extension.len() - 1] == "mp4" {
             return Ok("".to_owned());
         }
         let client = self.get_downloader(uri);
@@ -187,10 +187,6 @@ impl Downloader {
             unrecoverable: Some(false),
             description: Some(input.description.clone().unwrap_or("".to_owned())),
         };
-        //Check post description
-        if filter.is_unsafe(&input.description.unwrap_or("".to_owned())) {
-            output.unrecoverable = Some(true);
-        }
         
         for (i, image) in input.images.iter_mut().enumerate() {
             //Check each image, then push it to the output arr.
@@ -210,13 +206,22 @@ impl Downloader {
                 unrecoverable: Some(unrecoverable),
                 image_OCR_text: Some(text_from_images[i].clone())
             };
+            if (unrecoverable) {
+
+            }
             output.images.push(new_image);
         };
+        //Check post description
+        if filter.is_unsafe(&input.description.unwrap_or("".to_owned())) {
+            output.unrecoverable = Some(true);
+        }
+        //Check # of (non-video) images marked as 
+
         //Upload to DB
         self.db.upload_post(output.clone()).await;
 
         //Remove Folder
-        fs::remove_dir_all(&self.save_path);
+        fs::remove_dir_all(&self.save_path).await;
 
         //Return Result
         Ok(output)
@@ -228,7 +233,7 @@ impl Downloader {
         let mut response = client
             .get(&url)
             .header(USER_AGENT, "PostmanRuntime/7.26.8")
-            .header("Authorization", "Client-ID ")
+            .header("Authorization", "Client-ID 80e581547b60687")
             .header("Accept", "*/*")
             .header("Connection", "keep-alive")
             .send()
@@ -239,7 +244,7 @@ impl Downloader {
             response = client
                 .get(&url)
                 .header(USER_AGENT, "PostmanRuntime/7.26.8")
-                .header("Authorization", "Client-ID ")
+                .header("Authorization", "Client-ID 80e581547b60687")
                 .header("Accept", "*/*")
                 .header("Connection", "keep-alive")
                 .send()
