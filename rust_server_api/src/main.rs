@@ -16,7 +16,7 @@ use crate::imgur_interface::Downloader;
 
 //Functions
 async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl warp::Reply, warp::Rejection> {
-
+    println!("Request received");
     let document: Post = match db.get_post(&new_post.id).await {
         Ok(data) => {
             //The post already exists in the database, so return the information we already need.
@@ -97,7 +97,7 @@ async fn main() -> () {
     let routes = check_post.with(cors);
 
     warp::serve(routes)
-        .run(([127, 0, 0, 1], 3000))
+        .run(([127, 0, 0, 1], 3030))
         .await;
 }
 

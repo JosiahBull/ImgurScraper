@@ -27,11 +27,6 @@ pub struct Image {
     id: String,
     title: Option<String>,
     description: Option<String>,
-    width: u32,
-    height: u32,
-    views: u64,
-    size: u64,
-    bandwidth: u64,
     link: String
 }
 
@@ -45,7 +40,6 @@ pub struct Post {
     views: u32,
     link: String,
     is_album: bool,
-    favourite: Option<bool>,
     nsfw: Option<bool>,
     images_count: Option<u32>,
     is_ad: bool,
@@ -55,6 +49,24 @@ pub struct Post {
 #[derive(Deserialize, Debug)]
 struct Response {
     data: Post,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct Image_Raw {
+    id: String,
+    title: Option<String>,
+    description: Option<String>,
+    datetime: u64,
+    account_url: Option<String>,
+    views: u32,
+    link: String,
+    nsfw: Option<bool>,
+    is_ad: bool,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+struct Response_Image {
+    data: Image_Raw,
 }
 
 pub struct Downloader {
@@ -197,8 +209,6 @@ impl Downloader {
                 description: image.description.clone().unwrap_or("".to_owned()),
                 url: image.link.clone(),
                 unrecoverable: Some(unrecoverable),
-                replacement_img: None,
-                replacement_description: None,
                 image_OCR_text: Some(text_from_images[i].clone())
             };
             output.images.push(new_image);
@@ -215,8 +225,8 @@ impl Downloader {
 
     pub async fn get_post(&self) -> Result<Post, anyhow::Error> {
         let client = reqwest::Client::new();
-        let url = format!("https://api.imgur.com/3/album/{}", self.post_id);
-        let response = client
+        let mut url = format!("https://api.imgur.com/3/album/{}", self.post_id);
+        let mut response = client
             .get(&url)
             .header(USER_AGENT, "PostmanRuntime/7.26.8")
             .header("Authorization", "Client-ID ")
@@ -224,11 +234,50 @@ impl Downloader {
             .header("Connection", "keep-alive")
             .send()
             .await?;
-        if response.status().as_u16() != 200 {
-            bail!("Imgur server error: {}", response.text().await?);
+
+        if response.status().as_u16() == 404 {
+            url = format!("https://api.imgur.com/3/image/{}", self.post_id);
+            response = client
+                .get(&url)
+                .header(USER_AGENT, "PostmanRuntime/7.26.8")
+                .header("Authorization", "Client-ID ")
+                .header("Accept", "*/*")
+                .header("Connection", "keep-alive")
+                .send()
+                .await?;
+            
+            let result = response.text().await?;
+            //Process the response
+            let v: Response_Image = serde_json::from_str(&*result)?;
+            let v = v.data;
+            let post = Post {
+                id: v.id.clone(),
+                datetime: v.datetime,
+                title: v.title.clone(),
+                is_ad: v.is_ad,
+                description: v.description.clone(),
+                account_url: v.account_url,
+                views: v.views,
+                link: format!("https://imgur.com/gallery/{}", &v.id),
+                is_album: false,
+                nsfw: v.nsfw,
+                images_count: Some(1),
+                images: vec![Image {
+                    id: v.id,
+                    title: v.title,
+                    description: v.description,
+                    link: v.link,
+                }]
+            };
+
+            Ok(post)
+        } else {
+            if response.status().as_u16() != 200 {
+                bail!("Imgur server error: {}", response.text().await?);
+            }
+            let result = response.text().await?;
+            let v: Response = serde_json::from_str(&*result)?;
+            Ok(v.data)
         }
-        let result = response.text().await?;
-        let v: Response = serde_json::from_str(&*result)?;
-        Ok(v.data)
     }
 }

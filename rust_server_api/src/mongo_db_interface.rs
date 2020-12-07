@@ -16,8 +16,6 @@ pub struct Image {
     pub description: String,
     pub url: String,
     pub unrecoverable: Option<bool>,
-    pub replacement_img: Option<String>,
-    pub replacement_description: Option<String>,
     pub image_OCR_text: Option<String>,
 }
 
@@ -50,9 +48,7 @@ impl Database {
                 "id": image.id,
                 "description": image.description,
                 "url": image.url,
-                "unrecoverable": image.unrecoverable.unwrap_or(true),
-                "replacement_img": image.replacement_img.unwrap_or("".to_owned()),
-                "replacement_description": image.replacement_description.unwrap_or("".to_owned())
+                "unrecoverable": image.unrecoverable.unwrap_or(true)
             };
             images.push(new_image);
         }
