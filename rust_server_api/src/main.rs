@@ -7,8 +7,6 @@ mod mongo_db_interface;
 mod imgur_interface;
 mod filter;
 
-use std::time::Duration;
-use tokio::time::timeout;
 use warp::{http, Filter, http::Response};
 use crate::mongo_db_interface::{Database, Post};
 // use crate::types::*;

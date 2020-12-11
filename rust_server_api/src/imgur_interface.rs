@@ -14,13 +14,12 @@ use std::error;
 use std::path::Path;
 use serde::{Deserialize};
 use reqwest::header::USER_AGENT;
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use crate::mongo_db_interface::Database;
 use async_std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 // use image::imageops::*;
 
-const MAIN_URL: &str = "https://www.imgur.com/gallery/";
 const DEFAULT_MAX_CONNECTION: usize = 10;
 const UNRECOVERABLE_THRESHOLD: f32 = 0.2;
 
@@ -55,7 +54,7 @@ struct Response {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Image_Raw {
+struct ImageRaw {
     id: String,
     title: Option<String>,
     description: Option<String>,
@@ -68,8 +67,8 @@ struct Image_Raw {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Response_Image {
-    data: Image_Raw,
+struct ResponseImage {
+    data: ImageRaw,
 }
 
 pub struct Downloader {
@@ -188,7 +187,6 @@ impl Downloader {
             for image in &input.images {
                 urls_to_download.push(image.link.parse::<Uri>()?);
             }
-            let image_url_reference = urls_to_download.clone();
             
             while !urls_to_download.is_empty() {
                 let mut clients_vec = Vec::with_capacity(self.max_conn);
@@ -202,8 +200,7 @@ impl Downloader {
                 }
             }
     
-            //Run checks
-            
+            //Run check
             output = crate::mongo_db_interface::Post {
                 id: input.id.clone(),
                 images: vec![],
@@ -231,7 +228,7 @@ impl Downloader {
                     description: image.description.clone().unwrap_or("".to_owned()),
                     url: image.link.clone(),
                     unrecoverable: Some(unrecoverable),
-                    image_OCR_text: Some(text_from_images[i].clone())
+                    image_ocr_text: Some(text_from_images[i].clone())
                 };
                 if unrecoverable {
                     num_unrecoverable += 1;
@@ -287,7 +284,7 @@ impl Downloader {
             
             let result = response.text().await?;
             //Process the response
-            let v: Response_Image = serde_json::from_str(&*result)?;
+            let v: ResponseImage = serde_json::from_str(&*result)?;
             let v = v.data;
             let post = Post {
                 id: v.id.clone(),

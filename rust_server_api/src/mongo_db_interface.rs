@@ -1,6 +1,6 @@
 use mongodb::{Client, options::ClientOptions, bson::{doc, Bson}, bson};
 use serde::{Serialize, Deserialize};
-use anyhow::{Result, anyhow};
+use anyhow::{Result};
 
 #[derive(Clone)]
 pub struct Database {
@@ -16,7 +16,7 @@ pub struct Image {
     pub description: String,
     pub url: String,
     pub unrecoverable: Option<bool>,
-    pub image_OCR_text: Option<String>,
+    pub image_ocr_text: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -50,7 +50,7 @@ impl Database {
                 "description": image.description,
                 "url": image.url,
                 "unrecoverable": image.unrecoverable.unwrap_or(true),
-                "image_OCR_text" : image.image_OCR_text.unwrap_or("".to_owned()),
+                "image_ocr_text" : image.image_ocr_text.unwrap_or("".to_owned()),
             };
             images.push(new_image);
         }
