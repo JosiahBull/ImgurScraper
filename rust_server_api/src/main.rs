@@ -16,7 +16,7 @@ use crate::imgur_interface::Downloader;
 
 //Functions
 async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl warp::Reply, warp::Rejection> {
-    println!("Request received");
+    println!("Request received: {}", new_post.post_url);
     let document: Post = match db.get_post(&new_post.id).await {
         Ok(data) => {
             //The post already exists in the database, so return the information we already need.
@@ -36,6 +36,7 @@ async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl war
                     return Ok(response);
                 }
             };
+            // println!("{:?}", &post);
 
             let download = downloader.download_post_images(post).await;
             if download.is_err() {
@@ -65,9 +66,6 @@ async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl war
 }
 
 //Json Parsers
-fn authenticate_posts() -> impl Filter<Extract = (Vec<Post>,), Error = warp::Rejection> + Clone {
-    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
-}
 fn authenticate_post() -> impl Filter<Extract = (Post,), Error = warp::Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }
@@ -97,7 +95,10 @@ async fn main() -> () {
     let routes = check_post.with(cors);
 
     warp::serve(routes)
-        .run(([127, 0, 0, 1], 3030))
+        .tls()
+        .cert_path("/home/ubuntu/PersonalProjects/0015_ImgurScraper/extension_contact_server/src/certs/cert.pem")
+        .key_path("/home/ubuntu/PersonalProjects/0015_ImgurScraper/extension_contact_server/src/certs/key1.rsa")
+        .run(([0, 0, 0, 0], 3030))
         .await;
 }
 

@@ -18,10 +18,11 @@ use anyhow::{Result, anyhow, bail};
 use crate::mongo_db_interface::Database;
 use async_std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+// use image::imageops::*;
 
 const MAIN_URL: &str = "https://www.imgur.com/gallery/";
 const DEFAULT_MAX_CONNECTION: usize = 10;
-const UNRECOVERABLE_THRESHOLD: f32 = 0.5;
+const UNRECOVERABLE_THRESHOLD: f32 = 0.2;
 
 
 #[derive(Deserialize, Debug, Clone)]
@@ -132,39 +133,47 @@ impl Downloader {
         Ok(save_path)
     }
 
-    fn scan_image(&self, path: PathBuf) -> anyhow::Result<String>{
-        let mut scanner = leptess::LepTess::new(Some("./tessdata"), "eng").expect("Failed to load OCR Scanner.");
-        match scanner.set_image(&path) {
-            Ok(_) => {},
-            Err(e) => {        
-                return Ok("".to_owned())
-            }
-        }
-        scanner.set_source_resolution(70);
-        let text = scanner.get_utf8_text().unwrap_or("".to_owned());
-        Ok(text)
+    async fn scan_image(&self, path: PathBuf) -> anyhow::Result<String>{
+        // let mut img = image::open(&path).expect("Failed to open image to begin grayscaling.");
+        // img = img.grayscale();
+        // let mut img = img.as_mut_luma8().expect("Failed to grayscale image.");
+
+        // dither(&mut img, &BiLevel);
+        // img.save(&path).expect("Failed to resave image after dithering.");
+
+        let mut scanner = leptess::LepTess::new(Some("/home/ubuntu/PersonalProjects/0015_ImgurScraper/extension_contact_server/tessdata"), "eng").expect("Failed to load OCR Scanner.");
+        scanner.set_image(&path).expect("Failed to set image for OCR scanner.");
+
+        scanner.set_fallback_source_resolution(70);
+        Ok(scanner.get_utf8_text().expect("Failed to get utf8 text for OCR."))
     }
 
     async fn dl(&self, uri: Uri) -> anyhow::Result<String> {
         let input_string = uri.to_string();
         let extension: Vec<&str> = input_string.split(".").collect();
-        if extension[extension.len() - 1] == "mp4" {
+        let extension = extension[extension.len() -1 ];
+        if extension == "mp4" || extension == "gif" || extension == "gifv" {
             return Ok("".to_owned());
         }
         let client = self.get_downloader(uri);
-        Ok(client
+        let text = match client
             .and_then(|(res, url)| self.download(res, url) )
-            .and_then(|path| async move { self.scan_image(path) })
-            // .and_then(|words| async move { self.upload_to_db(words, post).await })
-            .await?)
+            .and_then(|path| self.scan_image(path) )
+        .await {
+            Ok(f) => f,
+            Err(e) => {
+                println!("An error occured while downloading and scanning image {}", e);
+                "".to_owned()
+            }
+        };  
+        Ok(text)
     }
 
     pub async fn download_post_images(&self, mut input: Post) -> anyhow::Result<crate::mongo_db_interface::Post> {
         let mut urls_to_download: Vec<Uri> = vec![];
         let mut text_from_images: Vec<String> = vec![];
-        let filter = crate::filter::Filter::new("./filter_word_list.txt")?;
+        let filter = crate::filter::Filter::new("/home/ubuntu/PersonalProjects/0015_ImgurScraper/extension_contact_server/filter_word_list.txt")?;
         let mut output: crate::mongo_db_interface::Post;
-
         if filter.is_unsafe(&input.title.clone().unwrap_or("".to_owned())) || filter.is_unsafe(&input.description.clone().unwrap_or("".to_owned())) {
             output = crate::mongo_db_interface::Post {
                 id: input.id,
@@ -196,7 +205,7 @@ impl Downloader {
             //Run checks
             
             output = crate::mongo_db_interface::Post {
-                id: input.id,
+                id: input.id.clone(),
                 images: vec![],
                 post_url: input.link,
                 datetime: get_time().to_string(),
@@ -206,6 +215,7 @@ impl Downloader {
             };
             let mut num_unrecoverable = 0;
             let mut num_images = 0;
+            assert_eq!(text_from_images.len(), input.images.len());
             for (i, image) in input.images.iter_mut().enumerate() {
                 //Check each image, then push it to the output arr.
     
@@ -216,7 +226,6 @@ impl Downloader {
                 if filter.is_unsafe(&text_from_images[i]) {
                     unrecoverable = true;
                 }
-    
                 let new_image = crate::mongo_db_interface::Image {
                     id: image.id.clone(),
                     description: image.description.clone().unwrap_or("".to_owned()),
@@ -228,7 +237,8 @@ impl Downloader {
                     num_unrecoverable += 1;
                 }
                 let extension: Vec<&str> = image.link.split(".").collect();
-                if extension[extension.len() - 1] != "mp4" {
+                let extension = extension[extension.len() - 1];
+                if extension != "mp4" && extension != "gif" && extension != "gifv"{
                     num_images += 1;
                 }
                 output.images.push(new_image);
@@ -237,13 +247,16 @@ impl Downloader {
             if (num_unrecoverable as f32 / num_images as f32) as f32 >= UNRECOVERABLE_THRESHOLD {
                 output.unrecoverable = Some(true);
             }
+            //Remove Folder
+            if fs::remove_dir_all(&self.save_path).await.is_err() {
+                println!("Failed to remove folder.");
+            }
         }
 
         //Upload to DB
-        self.db.upload_post(output.clone()).await;
-
-        //Remove Folder
-        fs::remove_dir_all(&self.save_path).await;
+        if self.db.upload_post(output.clone()).await.is_err() {
+            println!("Failed to upload post to db.");
+        }
 
         //Return Result
         Ok(output)

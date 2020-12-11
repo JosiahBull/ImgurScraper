@@ -1,3 +1,5 @@
 /rust_server_api/target
 /rust_server_api/.env
 rust_server_api/src/old
+*.pem
+*.rsa

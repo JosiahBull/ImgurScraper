@@ -49,7 +49,8 @@ impl Database {
                 "id": image.id,
                 "description": image.description,
                 "url": image.url,
-                "unrecoverable": image.unrecoverable.unwrap_or(true)
+                "unrecoverable": image.unrecoverable.unwrap_or(true),
+                "image_OCR_text" : image.image_OCR_text.unwrap_or("".to_owned()),
             };
             images.push(new_image);
         }
@@ -58,7 +59,9 @@ impl Database {
             "images": images,
             "post_url": post.post_url,
             "datetime": post.datetime,
-            "unrecoverable": post.unrecoverable.unwrap_or(true)
+            "unrecoverable": post.unrecoverable.unwrap_or(true),
+            "description": post.description.unwrap_or("".to_owned()),
+            "title": post.title.unwrap_or("".to_owned()),
         };
         
         let result = self.posts.insert_one(new_post, None).await?;

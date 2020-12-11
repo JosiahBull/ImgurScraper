@@ -18,10 +18,13 @@ impl Filter {
         Ok(Filter{words})
     }
     pub fn is_unsafe(&self, input: &str) -> bool {
-        let input = input.to_lowercase();
+        let input = format!(" {} ", input.to_lowercase().replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '!', '@', '#', '$', '%', '^', '&', '*', '-', '_', '+', '=', '`', '~', '\n', '\r', '\\', '/', '{', '}', '°', '’', '‘', '>', '<', '»', '¢', '?'][..], " "));
+        // println!("{}", input);
         for word in &self.words {
             let check_str = format!(" {} ", word);
+            // println!("Checking: '{}' with '{}'.", &input, &check_str);
             if input.contains(&check_str) {
+                // println!("Foundw word!");
                 return true;
             }
         }
