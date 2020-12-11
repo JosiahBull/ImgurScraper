@@ -1,3 +1,5 @@
+///This module handles connections to the imgur api and website.
+
 //Imports
 use std::cmp::min;
 use std::path::PathBuf;
@@ -18,12 +20,12 @@ use anyhow::{Result, bail};
 use crate::mongo_db_interface::Database;
 use async_std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-// use image::imageops::*;
 
+///Config
 const DEFAULT_MAX_CONNECTION: usize = 10;
 const UNRECOVERABLE_THRESHOLD: f32 = 0.2;
 
-
+///This struct holds data needed to request images from the imgur api.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Image {
     id: String,
@@ -32,6 +34,7 @@ pub struct Image {
     link: String
 }
 
+///This struct models the data from the imgur api response.
 #[derive(Deserialize, Debug, Clone)]
 pub struct Post {
     id: String,
@@ -48,11 +51,13 @@ pub struct Post {
     images: Vec<Image>
 }
 
+///The response received from the imgur api.
 #[derive(Deserialize, Debug)]
 struct Response {
     data: Post,
 }
 
+///This models the imgur api response when only a single image is present.
 #[derive(Deserialize, Clone, Debug)]
 struct ImageRaw {
     id: String,
@@ -66,11 +71,13 @@ struct ImageRaw {
     is_ad: bool,
 }
 
+///This models the response received from the imgur api for a single image.
 #[derive(Deserialize, Clone, Debug)]
 struct ResponseImage {
     data: ImageRaw,
 }
 
+///This struct is the main function of this module. It is a downloader to acquire images from an imgur post.
 pub struct Downloader {
     post_id: Uri,
     save_path: PathBuf,
@@ -78,6 +85,7 @@ pub struct Downloader {
     db: Database
 }
 
+///Creates and returns a filename from a url.
 fn create_filename(url: &str) -> Result<String, Box<dyn error::Error>> {
     let tmp = &Url::parse(&url)?;
     let res = &tmp.path();
@@ -85,11 +93,13 @@ fn create_filename(url: &str) -> Result<String, Box<dyn error::Error>> {
     Ok(path)
 }
 
+///Collects the current system time.
 fn get_time() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards").as_millis()
 }
 
 impl Downloader {
+    ///Generates a new downloader.
     pub fn new(post_id: &str, db: Database) -> Self {
         Downloader {
             post_id: post_id.parse::<Uri>().unwrap_or_else(|_| panic!("failed to parse URL: {}", post_id)),
@@ -98,7 +108,7 @@ impl Downloader {
             db: db
         }
     }
-
+    ///The function which recieves the bytes when downloading an image.
     async fn recv(&self, fut: ResponseFuture) -> Result<bytes::BytesMut, anyhow::Error> {
         let mut buf = bytes::BytesMut::new();
         let mut res = fut.await?;
@@ -110,7 +120,7 @@ impl Downloader {
 
         Ok(buf)
     }
-
+    ///Creates a downloader module to acquire the image. Returns a string with the url, and the downloaded image bytes.
     async fn get_downloader(&self, url: Uri) -> Result<(String, bytes::BytesMut), anyhow::Error> {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
@@ -119,34 +129,27 @@ impl Downloader {
 
         Ok((url.to_string(), content))
     }
-
+    ///Takes a url and the downloaded bytes of an image, and saves it to the drive.
     async fn download(&self, url: String, res: bytes::BytesMut) -> anyhow::Result<PathBuf> {
         let file_name = create_filename(&url).unwrap();
 
-        create_dir_all(&self.save_path).await.unwrap();//map_err(|e| anyhow::Error::new(e))?;
+        create_dir_all(&self.save_path).await.unwrap();
 
         let save_path = self.save_path.join(&file_name);
 
-        let mut file = File::create(&save_path).await.unwrap();//await.map_err(|e| anyhow::Error::new(e))?;
-        file.write_all(&res).await.unwrap();//.await.map_err(|e| anyhow::Error::new(e))?;
+        let mut file = File::create(&save_path).await.unwrap();
+        file.write_all(&res).await.unwrap();
         Ok(save_path)
     }
-
+    ///Takes an image path and scans it with tesseract OCR, returns any text it finds in the form of a string.
     async fn scan_image(&self, path: PathBuf) -> anyhow::Result<String>{
-        // let mut img = image::open(&path).expect("Failed to open image to begin grayscaling.");
-        // img = img.grayscale();
-        // let mut img = img.as_mut_luma8().expect("Failed to grayscale image.");
-
-        // dither(&mut img, &BiLevel);
-        // img.save(&path).expect("Failed to resave image after dithering.");
-
         let mut scanner = leptess::LepTess::new(Some("/home/ubuntu/PersonalProjects/0015_ImgurScraper/extension_contact_server/tessdata"), "eng").expect("Failed to load OCR Scanner.");
         scanner.set_image(&path).expect("Failed to set image for OCR scanner.");
 
         scanner.set_fallback_source_resolution(70);
         Ok(scanner.get_utf8_text().expect("Failed to get utf8 text for OCR."))
     }
-
+    ///Manages to the multi-stage download of an image. First downloading, then scanning, then deleting.
     async fn dl(&self, uri: Uri) -> anyhow::Result<String> {
         let input_string = uri.to_string();
         let extension: Vec<&str> = input_string.split(".").collect();
@@ -167,7 +170,7 @@ impl Downloader {
         };  
         Ok(text)
     }
-
+    ///Downloads all images from a post, carrying out OCR on them and returning a Post.
     pub async fn download_post_images(&self, mut input: Post) -> anyhow::Result<crate::mongo_db_interface::Post> {
         let mut urls_to_download: Vec<Uri> = vec![];
         let mut text_from_images: Vec<String> = vec![];
@@ -258,7 +261,7 @@ impl Downloader {
         //Return Result
         Ok(output)
     }
-
+    ///Takes a url to imgur post, contacts the imgur inc api to collect data about the post.
     pub async fn get_post(&self) -> Result<Post, anyhow::Error> {
         let client = reqwest::Client::new();
         let mut url = format!("https://api.imgur.com/3/album/{}", self.post_id);

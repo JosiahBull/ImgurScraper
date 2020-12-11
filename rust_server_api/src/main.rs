@@ -1,6 +1,5 @@
 //Global Config
 const SERVER_IP: &str = "mongodb://localhost:27017";
-// const WORD_BAN_LIST: Vec<&str> = vec!["trump", "biden"];
 
 //Imports
 mod mongo_db_interface;
@@ -9,10 +8,9 @@ mod filter;
 
 use warp::{http, Filter, http::Response};
 use crate::mongo_db_interface::{Database, Post};
-// use crate::types::*;
 use crate::imgur_interface::Downloader;
 
-//Functions
+///An api endpoint. Takes a post from the api, and then returns the data in that post. Will OCR scan, and apply filtering if required.
 async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl warp::Reply, warp::Rejection> {
     println!("Request received: {}", new_post.post_url);
     let document: Post = match db.get_post(&new_post.id).await {
@@ -34,7 +32,6 @@ async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl war
                     return Ok(response);
                 }
             };
-            // println!("{:?}", &post);
 
             let download = downloader.download_post_images(post).await;
             if download.is_err() {
@@ -64,6 +61,8 @@ async fn process_posts_to_queue(new_post: Post, db: Database) -> Result<impl war
 }
 
 //Json Parsers
+
+///Parses the input json to a struct that the internal program can use. If it fails returns 403 bad request along with info to the user.
 fn authenticate_post() -> impl Filter<Extract = (Post,), Error = warp::Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }
@@ -88,8 +87,6 @@ async fn main() -> () {
             process_posts_to_queue(info, db)
         });
 
-    // let mark_as_political = ;
-
     let routes = check_post.with(cors);
 
     warp::serve(routes)
@@ -99,11 +96,3 @@ async fn main() -> () {
         .run(([0, 0, 0, 0], 3030))
         .await;
 }
-
-// #[tokio::main]
-// async fn main() -> () {
-//     let downloader = Downloader::new("KUSrMe4");
-//     let post = downloader.get_post().await.unwrap();
-
-//     downloader.download_post_images(post).await.unwrap();
-// }
