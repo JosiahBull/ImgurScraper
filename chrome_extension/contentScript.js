@@ -1,4 +1,4 @@
-// 'use strict';
+'use strict';
 
 //Global Config
 const SERVER_IP = '';
@@ -91,6 +91,7 @@ async function request_post(post_id) {
     })
 }
 
+//Scans ahead the next 5 images and buffers them in the cache as the user scrolls through.
 async function get_ahead() {
     let gallery = document.getElementsByClassName("base list");
     let current_index = 0;
@@ -106,6 +107,7 @@ async function get_ahead() {
     }
 }
 
+//Scans the page and makes relevant requests to the server.
 async function scan_page_core(retry_num) {
     try {
         check_images(); //Hide any relevant images.
@@ -115,7 +117,6 @@ async function scan_page_core(retry_num) {
         if (!cache.hasOwnProperty(id)) cache[id] = post_data;
 
         await post_data.then(result => {
-            // console.log(result);
             if (result.unrecoverable) {
                 trigger_next();
                 show_toast("Skipped Post!");
@@ -133,10 +134,12 @@ async function scan_page_core(retry_num) {
     }
 }
 
+//Blurs the given html element.
 function blur_image(image) {
     image.style.filter = 'blur(5px)';
 }
 
+//Scans the image on a given page, and blur any which are political. This only triggers on posts which have <20% political images.
 function check_images() {
     try {
         let id = get_id();
@@ -162,7 +165,7 @@ function check_images() {
     }
 };
 
-let scan_page = async () => setTimeout(() => scan_page_core(1), 500); //Delay the call by 500ms to let the DOM load fully.
+let scan_page = async () => setTimeout(() => scan_page_core(1), 500); //Delay the call by 500ms
 
 
 
