@@ -8,15 +8,16 @@
     "content_scripts" : [
         {
             "matches": ["https://imgur.com/gallery/*"],
-            "css": [],
+            "css": ["contentScript.css"],
             "js": ["third_party/axios.min.js", "contentScript.js"]
         }
     ],
 
     "browser_action": {
-     "default_icon": "icon.png"
+        "default_icon": "icon.png"
     },
     "permissions": [
-     "activeTab"
-     ]
+        "activeTab",
+        "http://54.253.194.184:3030/*"
+    ]
 }
